@@ -83,10 +83,17 @@ export default function InvoiceFlow() {
       setError('Please fill in business and client names');
       return false;
     }
-    if (invoiceData.items.some(item => !item.description || item.rate <= 0)) {
-      setError('Please complete all line items');
+    
+    // Filter to only items that are actually complete (have description AND rate > 0)
+    const validItems = invoiceData.items.filter(item => 
+      item.description.trim() !== '' && item.rate > 0
+    );
+    
+    if (validItems.length === 0) {
+      setError('Please add at least one item with a description and rate');
       return false;
     }
+    
     setError('');
     return true;
   };
@@ -98,9 +105,18 @@ export default function InvoiceFlow() {
     setError('');
     
     try {
-      // Dynamically import jsPDF
-      const { default: jsPDF } = await import('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+      // Load jsPDF from CDN if not already loaded
+      if (!window.jspdf) {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.appendChild(script);
+        });
+      }
       
+      const { jsPDF } = window.jspdf;
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
@@ -185,6 +201,11 @@ export default function InvoiceFlow() {
       // Items Table
       yPos = Math.max(yPos, billToYStart + 40) + 10;
       
+      // Filter to only complete items (have both description and rate > 0)
+      const validItems = invoiceData.items.filter(item => 
+        item.description.trim() !== '' && item.rate > 0
+      );
+      
       // Table Header
       doc.setFillColor(79, 70, 229); // Indigo
       doc.rect(20, yPos, pageWidth - 40, 8, 'F');
@@ -202,7 +223,7 @@ export default function InvoiceFlow() {
       doc.setTextColor(0, 0, 0);
       doc.setFont(undefined, 'normal');
       
-      invoiceData.items.forEach((item, index) => {
+      validItems.forEach((item, index) => {
         // Check if we need a new page
         if (yPos > pageHeight - 60) {
           doc.addPage();
@@ -223,7 +244,7 @@ export default function InvoiceFlow() {
         yPos += 3;
         
         // Light separator line
-        if (index < invoiceData.items.length - 1) {
+        if (index < validItems.length - 1) {
           doc.setDrawColor(230, 230, 230);
           doc.line(20, yPos, pageWidth - 20, yPos);
           yPos += 5;
