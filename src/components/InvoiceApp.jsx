@@ -32,6 +32,27 @@ export default function InvoiceApp() {
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState('');
+  const [jsPDFLoaded, setJsPDFLoaded] = useState(false);
+
+  // Load jsPDF on component mount
+  useEffect(() => {
+    if (!window.jspdf) {
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+      script.async = true;
+      script.onload = () => {
+        console.log('jsPDF loaded successfully');
+        setJsPDFLoaded(true);
+      };
+      script.onerror = () => {
+        console.error('Failed to load jsPDF');
+        setError('Failed to load PDF library. Please refresh the page.');
+      };
+      document.head.appendChild(script);
+    } else {
+      setJsPDFLoaded(true);
+    }
+  }, []);
 
   useEffect(() => {
     const subtotal = invoiceData.items.reduce((sum, item) => sum + item.amount, 0);
@@ -85,7 +106,6 @@ export default function InvoiceApp() {
       return false;
     }
     
-    // Filter to only items that are actually complete (have description AND rate > 0)
     const validItems = invoiceData.items.filter(item => 
       item.description.trim() !== '' && item.rate > 0
     );
@@ -106,15 +126,9 @@ export default function InvoiceApp() {
     setError('');
     
     try {
-      // Load jsPDF from CDN if not already loaded
+      // Ensure jsPDF is loaded
       if (!window.jspdf) {
-        await new Promise((resolve, reject) => {
-          const script = document.createElement('script');
-          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
-          script.onload = resolve;
-          script.onerror = reject;
-          document.head.appendChild(script);
-        });
+        throw new Error('PDF library not loaded. Please refresh the page and try again.');
       }
       
       const { jsPDF } = window.jspdf;
@@ -125,7 +139,7 @@ export default function InvoiceApp() {
       
       // Header - Invoice Title
       doc.setFontSize(28);
-      doc.setTextColor(79, 70, 229); // Indigo
+      doc.setTextColor(79, 70, 229);
       doc.text('INVOICE', pageWidth / 2, yPos, { align: 'center' });
       yPos += 15;
       
@@ -202,13 +216,12 @@ export default function InvoiceApp() {
       // Items Table
       yPos = Math.max(yPos, billToYStart + 40) + 10;
       
-      // Filter to only complete items (have both description and rate > 0)
       const validItems = invoiceData.items.filter(item => 
         item.description.trim() !== '' && item.rate > 0
       );
       
       // Table Header
-      doc.setFillColor(79, 70, 229); // Indigo
+      doc.setFillColor(79, 70, 229);
       doc.rect(20, yPos, pageWidth - 40, 8, 'F');
       
       doc.setTextColor(255, 255, 255);
@@ -225,7 +238,6 @@ export default function InvoiceApp() {
       doc.setFont(undefined, 'normal');
       
       validItems.forEach((item, index) => {
-        // Check if we need a new page
         if (yPos > pageHeight - 60) {
           doc.addPage();
           yPos = 20;
@@ -244,7 +256,6 @@ export default function InvoiceApp() {
         
         yPos += 3;
         
-        // Light separator line
         if (index < validItems.length - 1) {
           doc.setDrawColor(230, 230, 230);
           doc.line(20, yPos, pageWidth - 20, yPos);
@@ -305,12 +316,15 @@ export default function InvoiceApp() {
         }
       }
       
-      // Save the PDF
-      doc.save(`Invoice-${invoiceData.invoiceNumber}.pdf`);
+      // Save the PDF - this is the critical line that actually downloads the file
+      const fileName = `Invoice-${invoiceData.invoiceNumber}.pdf`;
+      doc.save(fileName);
+      
+      console.log('PDF generated successfully:', fileName);
       
     } catch (err) {
       console.error('PDF Generation Error:', err);
-      setError('Failed to generate PDF. Please try again.');
+      setError(`Failed to generate PDF: ${err.message}`);
     } finally {
       setIsGenerating(false);
     }
@@ -332,36 +346,44 @@ export default function InvoiceApp() {
               </div>
               <span className="text-xl font-semibold text-gray-900">InvoiceFlow</span>
             </Link>
-            <div className="w-24"></div> {/* Spacer for centering */}
           </div>
         </div>
       </nav>
 
-      <div className="max-w-7xl mx-auto p-6">
+      <div className="max-w-7xl mx-auto px-6 py-10">
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">Create Your Invoice</h1>
-          <p className="text-gray-600">Fill in the details below to generate a professional invoice</p>
+          <p className="text-gray-600">Fill in the details below to generate a professional PDF invoice</p>
+          {!jsPDFLoaded && (
+            <div className="mt-4 inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-2 rounded-lg text-sm">
+              <div className="w-4 h-4 border-2 border-blue-700 border-t-transparent rounded-full animate-spin" />
+              Loading PDF library...
+            </div>
+          )}
         </div>
 
+        {/* Error Message */}
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-800">
-            <AlertCircle className="w-5 h-5 flex-shrink-0" />
-            <p>{error}</p>
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <div className="text-red-900 font-semibold">Error</div>
+              <div className="text-red-700 text-sm">{error}</div>
+            </div>
           </div>
         )}
 
         <div className="grid lg:grid-cols-2 gap-8">
           {/* Form Section */}
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Invoice Details</h2>
-            
-            {/* Invoice Info */}
-            <div className="mb-6">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">Invoice Information</h3>
-              <div className="grid grid-cols-3 gap-3">
+          <div className="bg-white rounded-xl shadow-lg p-6 space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Invoice Details</h2>
+              
+              {/* Invoice Info */}
+              <div className="grid grid-cols-3 gap-3 mb-6">
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">Invoice #</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Invoice #</label>
                   <input
                     type="text"
                     value={invoiceData.invoiceNumber}
@@ -370,7 +392,7 @@ export default function InvoiceApp() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">Date</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Date</label>
                   <input
                     type="date"
                     value={invoiceData.invoiceDate}
@@ -379,7 +401,7 @@ export default function InvoiceApp() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">Due Date</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Due Date</label>
                   <input
                     type="date"
                     value={invoiceData.dueDate}
@@ -388,91 +410,92 @@ export default function InvoiceApp() {
                   />
                 </div>
               </div>
-            </div>
 
-            {/* Business Info */}
-            <div className="mb-6 p-4 bg-indigo-50 rounded-lg">
-              <h3 className="text-sm font-semibold text-indigo-900 mb-3">Your Business</h3>
-              <div className="space-y-3">
-                <input
-                  type="text"
-                  placeholder="Business Name *"
-                  value={invoiceData.businessName}
-                  onChange={(e) => updateField('businessName', e.target.value)}
-                  className="w-full px-3 py-2 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
-                <textarea
-                  placeholder="Business Address"
-                  value={invoiceData.businessAddress}
-                  onChange={(e) => updateField('businessAddress', e.target.value)}
-                  rows="2"
-                  className="w-full px-3 py-2 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
-                <input
-                  type="email"
-                  placeholder="Email"
-                  value={invoiceData.businessEmail}
-                  onChange={(e) => updateField('businessEmail', e.target.value)}
-                  className="w-full px-3 py-2 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
-                <input
-                  type="tel"
-                  placeholder="Phone"
-                  value={invoiceData.businessPhone}
-                  onChange={(e) => updateField('businessPhone', e.target.value)}
-                  className="w-full px-3 py-2 border border-indigo-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
+              {/* Business Info */}
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">From (Your Business)</h3>
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    placeholder="Business Name *"
+                    value={invoiceData.businessName}
+                    onChange={(e) => updateField('businessName', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                  <textarea
+                    placeholder="Business Address"
+                    value={invoiceData.businessAddress}
+                    onChange={(e) => updateField('businessAddress', e.target.value)}
+                    rows="2"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      type="email"
+                      placeholder="Email"
+                      value={invoiceData.businessEmail}
+                      onChange={(e) => updateField('businessEmail', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    />
+                    <input
+                      type="tel"
+                      placeholder="Phone"
+                      value={invoiceData.businessPhone}
+                      onChange={(e) => updateField('businessPhone', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
 
-            {/* Client Info */}
-            <div className="mb-6 p-4 bg-purple-50 rounded-lg">
-              <h3 className="text-sm font-semibold text-purple-900 mb-3">Bill To</h3>
-              <div className="space-y-3">
-                <input
-                  type="text"
-                  placeholder="Client Name *"
-                  value={invoiceData.clientName}
-                  onChange={(e) => updateField('clientName', e.target.value)}
-                  className="w-full px-3 py-2 border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
-                <textarea
-                  placeholder="Client Address"
-                  value={invoiceData.clientAddress}
-                  onChange={(e) => updateField('clientAddress', e.target.value)}
-                  rows="2"
-                  className="w-full px-3 py-2 border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
-                <input
-                  type="email"
-                  placeholder="Email"
-                  value={invoiceData.clientEmail}
-                  onChange={(e) => updateField('clientEmail', e.target.value)}
-                  className="w-full px-3 py-2 border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                />
+              {/* Client Info */}
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">Bill To (Client)</h3>
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    placeholder="Client Name *"
+                    value={invoiceData.clientName}
+                    onChange={(e) => updateField('clientName', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                  <textarea
+                    placeholder="Client Address"
+                    value={invoiceData.clientAddress}
+                    onChange={(e) => updateField('clientAddress', e.target.value)}
+                    rows="2"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                  <input
+                    type="email"
+                    placeholder="Client Email"
+                    value={invoiceData.clientEmail}
+                    onChange={(e) => updateField('clientEmail', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                </div>
               </div>
             </div>
 
             {/* Line Items */}
             <div className="mb-6">
-              <div className="flex justify-between items-center mb-3">
-                <h3 className="text-sm font-semibold text-gray-700">Items</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-semibold text-gray-900">Line Items</h3>
                 <button
                   onClick={addItem}
-                  className="flex items-center gap-1 px-3 py-1 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                  className="flex items-center gap-2 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 transition-colors text-sm font-medium"
                 >
                   <Plus className="w-4 h-4" />
                   Add Item
                 </button>
               </div>
-              
               <div className="space-y-3">
                 {invoiceData.items.map((item, index) => (
-                  <div key={index} className="p-3 border border-gray-200 rounded-lg">
-                    <div className="flex justify-between items-start mb-2">
+                  <div key={index} className="border border-gray-200 rounded-lg p-3">
+                    <div className="flex items-start gap-2 mb-2">
                       <input
                         type="text"
-                        placeholder="Description *"
+                        placeholder="Item description"
                         value={item.description}
                         onChange={(e) => updateItem(index, 'description', e.target.value)}
                         className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
@@ -480,7 +503,7 @@ export default function InvoiceApp() {
                       {invoiceData.items.length > 1 && (
                         <button
                           onClick={() => removeItem(index)}
-                          className="ml-2 p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -557,13 +580,18 @@ export default function InvoiceApp() {
             {/* Generate Button */}
             <button
               onClick={generatePDF}
-              disabled={isGenerating}
+              disabled={isGenerating || !jsPDFLoaded}
               className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isGenerating ? (
                 <>
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   Generating PDF...
+                </>
+              ) : !jsPDFLoaded ? (
+                <>
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Loading...
                 </>
               ) : (
                 <>
