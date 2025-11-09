@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { FileText, Plus, Trash2, Download, AlertCircle, ArrowLeft, Home } from 'lucide-react';
+import { FileText, Plus, Trash2, Download, AlertCircle, ArrowLeft } from 'lucide-react';
+import { jsPDF } from 'jspdf';
 
 export default function InvoiceApp() {
   const [invoiceData, setInvoiceData] = useState({
@@ -32,27 +33,6 @@ export default function InvoiceApp() {
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState('');
-  const [jsPDFLoaded, setJsPDFLoaded] = useState(false);
-
-  // Load jsPDF on component mount
-  useEffect(() => {
-    if (!window.jspdf) {
-      const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
-      script.async = true;
-      script.onload = () => {
-        console.log('jsPDF loaded successfully');
-        setJsPDFLoaded(true);
-      };
-      script.onerror = () => {
-        console.error('Failed to load jsPDF');
-        setError('Failed to load PDF library. Please refresh the page.');
-      };
-      document.head.appendChild(script);
-    } else {
-      setJsPDFLoaded(true);
-    }
-  }, []);
 
   useEffect(() => {
     const subtotal = invoiceData.items.reduce((sum, item) => sum + item.amount, 0);
@@ -126,12 +106,6 @@ export default function InvoiceApp() {
     setError('');
     
     try {
-      // Ensure jsPDF is loaded
-      if (!window.jspdf) {
-        throw new Error('PDF library not loaded. Please refresh the page and try again.');
-      }
-      
-      const { jsPDF } = window.jspdf;
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
@@ -316,14 +290,14 @@ export default function InvoiceApp() {
         }
       }
       
-      // Save the PDF - this is the critical line that actually downloads the file
+      // Save the PDF
       const fileName = `Invoice-${invoiceData.invoiceNumber}.pdf`;
       doc.save(fileName);
       
-      console.log('PDF generated successfully:', fileName);
+      console.log('✅ PDF generated successfully:', fileName);
       
     } catch (err) {
-      console.error('PDF Generation Error:', err);
+      console.error('❌ PDF Generation Error:', err);
       setError(`Failed to generate PDF: ${err.message}`);
     } finally {
       setIsGenerating(false);
@@ -355,12 +329,6 @@ export default function InvoiceApp() {
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">Create Your Invoice</h1>
           <p className="text-gray-600">Fill in the details below to generate a professional PDF invoice</p>
-          {!jsPDFLoaded && (
-            <div className="mt-4 inline-flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-2 rounded-lg text-sm">
-              <div className="w-4 h-4 border-2 border-blue-700 border-t-transparent rounded-full animate-spin" />
-              Loading PDF library...
-            </div>
-          )}
         </div>
 
         {/* Error Message */}
@@ -580,18 +548,13 @@ export default function InvoiceApp() {
             {/* Generate Button */}
             <button
               onClick={generatePDF}
-              disabled={isGenerating || !jsPDFLoaded}
+              disabled={isGenerating}
               className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {isGenerating ? (
                 <>
                   <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   Generating PDF...
-                </>
-              ) : !jsPDFLoaded ? (
-                <>
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  Loading...
                 </>
               ) : (
                 <>
